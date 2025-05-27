@@ -5,7 +5,8 @@ import {
   signInWithEmailAndPassword,
   signOut,
   updateProfile,
-  onAuthStateChanged
+  onAuthStateChanged,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import {
   getFirestore,
@@ -23,9 +24,7 @@ import {
   onSnapshot,
   serverTimestamp,
   arrayUnion,
-  limit,
-  startAfter,
-  and
+  limit
 } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -41,27 +40,34 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 export const db = getFirestore(app);
 
+const sanitize = (obj) =>
+  Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined));
+
 // Authentication functions
 export const signUp = async (email, password, userData) => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
+    const { password: _, confirmPassword: __, ...sanitizedData } = userData;
 
     // Update profile with display name
     await updateProfile(user, {
       displayName: userData.name
     });
 
+    const cleanedData = sanitize(sanitizedData);
+
     // Create user document in Firestore
-    await setDoc(doc(db, 'users', user.uid), {
-      ...userData,
+    await setDoc(doc(db, "users", user.uid), {
       email: user.email,
       uid: user.uid,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      ...cleanedData,
     });
 
     return user;
   } catch (error) {
+    console.error("SignUp Error:", error.message);
     throw error;
   }
 };
@@ -83,6 +89,14 @@ export const logout = async () => {
   }
 };
 
+export const resetPassword = async (email) => {
+  try {
+    await sendPasswordResetEmail(auth, email);
+  } catch (error) {
+    throw error;
+  }
+};
+
 // Firestore functions
 export const getUserData = async (uid) => {
   try {
@@ -96,6 +110,19 @@ export const getUserData = async (uid) => {
 export const updateUserData = async (uid, data) => {
   try {
     await updateDoc(doc(db, 'users', uid), data);
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getFreelancers = async () => {
+  try {
+    const q = query(collection(db, 'users'), where('userType', '==', 'freelancer'));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
   } catch (error) {
     throw error;
   }
@@ -124,15 +151,15 @@ export const getJobs = async (filters = {}) => {
     if (filters.status) {
       q = query(q, where('status', '==', filters.status));
     }
-    if (filters.skills && filters.skills.length > 0) {
+    if (filters.skills?.length) {
       q = query(q, where('skills', 'array-contains-any', filters.skills));
     }
     if (filters.clientId) {
       q = query(q, where('clientId', '==', filters.clientId));
     }
 
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
       createdAt: doc.data().createdAt?.toDate?.() || new Date()
@@ -142,24 +169,11 @@ export const getJobs = async (filters = {}) => {
   }
 };
 
-export const getFreelancers = async () => {
-  try {
-    const q = query(collection(db, 'users'), where('userType', '==', 'freelancer'));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-  } catch (error) {
-    throw error;
-  }
-};
-
 // Enhanced Job Functions
 export const getJobById = async (jobId) => {
   try {
-    const jobDoc = await getDoc(doc(db, 'jobs', jobId));
-    if (jobDoc.exists()) {
+    const docRef = await getDoc(doc(db, 'jobs', jobId));
+    if (!docRef.exists()) {
       return {
         id: jobDoc.id,
         ...jobDoc.data(),
@@ -221,8 +235,8 @@ export const getJobApplications = async (jobId) => {
       where('jobId', '==', jobId),
       orderBy('createdAt', 'desc')
     );
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
       createdAt: doc.data().createdAt?.toDate?.() || new Date()
@@ -239,8 +253,8 @@ export const getUserApplications = async (freelancerId) => {
       where('freelancerId', '==', freelancerId),
       orderBy('createdAt', 'desc')
     );
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
       createdAt: doc.data().createdAt?.toDate?.() || new Date()
@@ -253,7 +267,7 @@ export const getUserApplications = async (freelancerId) => {
 // Messaging Functions
 export const createConversation = async (participants, jobId = null) => {
   try {
-    const conversationData = {
+    const data = {
       participants,
       jobId,
       createdAt: serverTimestamp(),
@@ -264,10 +278,10 @@ export const createConversation = async (participants, jobId = null) => {
 
     // Initialize unread count for each participant
     participants.forEach(participantId => {
-      conversationData.unreadCount[participantId] = 0;
+      data.unreadCount[participantId] = 0;
     });
 
-    const docRef = await addDoc(collection(db, 'conversations'), conversationData);
+    const docRef = await addDoc(collection(db, 'conversations'), data);
     return docRef.id;
   } catch (error) {
     throw error;
@@ -282,19 +296,14 @@ export const getOrCreateConversation = async (user1Id, user2Id, jobId = null) =>
       where('participants', 'array-contains', user1Id)
     );
 
-    const querySnapshot = await getDocs(q);
-    const existingConversation = querySnapshot.docs.find(doc => {
+    const snapshot = await getDocs(q);
+    const existing = snapshot.docs.find(doc => {
       const data = doc.data();
-      return data.participants.includes(user2Id) &&
-             (jobId ? data.jobId === jobId : !data.jobId);
+      return data.participants.includes(user2Id) && (jobId ? data.jobId === jobId : !data.jobId);
     });
 
-    if (existingConversation) {
-      return existingConversation.id;
-    }
+    return existing ? existing.id : await createConversation([user1Id, user2Id], jobId);
 
-    // Create new conversation
-    return await createConversation([user1Id, user2Id], jobId);
   } catch (error) {
     throw error;
   }
@@ -315,20 +324,20 @@ export const sendMessage = async (conversationId, senderId, content, type = 'tex
 
     // Update conversation with last message
     const conversationRef = doc(db, 'conversations', conversationId);
-    const conversationDoc = await getDoc(conversationRef);
+    const conversationSnap = await getDoc(conversationRef);
 
-    if (conversationDoc.exists()) {
-      const conversation = conversationDoc.data();
+    if (conversationSnap.exists()) {
+      const convo = conversationSnap.data();
       const updates = {
         lastMessage: content,
         lastMessageTime: serverTimestamp(),
-        unreadCount: { ...conversation.unreadCount }
+        unreadCount: { ...convo.unreadCount }
       };
 
       // Increment unread count for other participants
-      conversation.participants.forEach(participantId => {
-        if (participantId !== senderId) {
-          updates.unreadCount[participantId] = (updates.unreadCount[participantId] || 0) + 1;
+      convo.participants.forEach(id => {
+        if (id !== senderId) {
+          updates.unreadCount[id] = (updates.unreadCount[id] || 0) + 1;
         }
       });
 
@@ -372,8 +381,8 @@ export const getMessages = (conversationId, callback, limitCount = 50) => {
       id: doc.id,
       ...doc.data(),
       createdAt: doc.data().createdAt?.toDate?.() || new Date()
-    })).reverse(); // Reverse to show oldest first
-    callback(messages);
+    })); // Reverse to show oldest first
+    callback(messages.reverse());
   });
 };
 

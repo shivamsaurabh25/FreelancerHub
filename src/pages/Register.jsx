@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { signUp } from '../services/firebase';
-import { User, Mail, Lock, Eye, EyeOff, UserPlus, Users, Briefcase } from 'lucide-react';
+import { User, Mail, Lock, Eye, EyeOff, UserPlus, Users, Briefcase, Phone, Globe, MapPin, CreditCard, FileText } from 'lucide-react';
 
 const Register = () => {
   const [formData, setFormData] = useState({
@@ -9,7 +9,19 @@ const Register = () => {
     email: '',
     password: '',
     confirmPassword: '',
-    userType: 'freelancer'
+    userType: 'freelancer',
+
+    // Freelancer specific
+    phone: '',
+    location: '',
+    skills: '',
+    hourlyRate: '',
+    portfolio: '',
+
+    // Client specific
+    companyName: '',
+    industry: '',
+    website: ''
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -31,7 +43,7 @@ const Register = () => {
     setLoading(true);
     setError('');
 
-    // Validation
+    // Basic validation
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match.');
       setLoading(false);
@@ -44,14 +56,43 @@ const Register = () => {
       return;
     }
 
+    // Additional validation for freelancer and client fields could be added here
+
     try {
-      const userData = {
+      // Prepare userData to pass to signUp
+      let userData = {
         name: formData.name,
         userType: formData.userType,
         profileComplete: false
       };
 
-      await signUp(formData.email, formData.password, userData);
+      if (formData.userType === 'freelancer') {
+        userData = {
+          ...userData,
+          phone: formData.phone,
+          location: formData.location,
+          skills: formData.skills.split(',').map(skill => skill.trim()).filter(Boolean), // convert skills string to array
+          hourlyRate: formData.hourlyRate,
+          portfolio: formData.portfolio
+        };
+      } else if (formData.userType === 'client') {
+        userData = {
+          ...userData,
+          companyName: formData.companyName,
+          industry: formData.industry,
+          website: formData.website
+        };
+      }
+
+      await signUp(formData.email, formData.password, {
+        userType: formData.userType,
+        name: formData.name,
+        skills: formData.skills.split(",").map(s => s.trim()),
+        company: formData.company,
+        website: formData.website,
+        location: formData.location,
+        portfolio: formData.portfolio,
+      });
       navigate('/dashboard');
     } catch (error) {
       console.error('Registration error:', error);
@@ -169,6 +210,155 @@ const Register = () => {
               </div>
             </div>
 
+            {/* Conditional Fields Based on User Type */}
+
+            {formData.userType === 'freelancer' && (
+              <>
+                {/* Location */}
+                <div>
+                  <label htmlFor="location" className="block text-white/80 text-sm font-medium mb-2">
+                    Location
+                  </label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-white/50" />
+                    <input
+                      type="text"
+                      id="location"
+                      name="location"
+                      value={formData.location}
+                      onChange={handleChange}
+                      className="input-glass pl-12"
+                      placeholder="Enter your location"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Skills */}
+                <div>
+                  <label htmlFor="skills" className="block text-white/80 text-sm font-medium mb-2">
+                    Skills (comma separated)
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-white/50" />
+                    <input
+                      type="text"
+                      id="skills"
+                      name="skills"
+                      value={formData.skills}
+                      onChange={handleChange}
+                      className="input-glass pl-12"
+                      placeholder="e.g., React, Node.js, UI Design"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Hourly Rate */}
+                <div>
+                  <label htmlFor="hourlyRate" className="block text-white/80 text-sm font-medium mb-2">
+                    Hourly Rate ($)
+                  </label>
+                  <div className="relative">
+                    <CreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-white/50" />
+                    <input
+                      type="number"
+                      id="hourlyRate"
+                      name="hourlyRate"
+                      value={formData.hourlyRate}
+                      onChange={handleChange}
+                      className="input-glass pl-12"
+                      placeholder="Enter your hourly rate"
+                      min="0"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Portfolio */}
+                <div>
+                  <label htmlFor="portfolio" className="block text-white/80 text-sm font-medium mb-2">
+                    Portfolio URL
+                  </label>
+                  <div className="relative">
+                    <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-white/50" />
+                    <input
+                      type="url"
+                      id="portfolio"
+                      name="portfolio"
+                      value={formData.portfolio}
+                      onChange={handleChange}
+                      className="input-glass pl-12"
+                      placeholder="https://yourportfolio.com"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {formData.userType === 'client' && (
+              <>
+                {/* Company Name */}
+                <div>
+                  <label htmlFor="companyName" className="block text-white/80 text-sm font-medium mb-2">
+                    Company Name
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-white/50" />
+                    <input
+                      type="text"
+                      id="companyName"
+                      name="companyName"
+                      value={formData.companyName}
+                      onChange={handleChange}
+                      className="input-glass pl-12"
+                      placeholder="Enter your company name"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Industry */}
+                <div>
+                  <label htmlFor="industry" className="block text-white/80 text-sm font-medium mb-2">
+                    Industry
+                  </label>
+                  <div className="relative">
+                    <Briefcase className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-white/50" />
+                    <input
+                      type="text"
+                      id="industry"
+                      name="industry"
+                      value={formData.industry}
+                      onChange={handleChange}
+                      className="input-glass pl-12"
+                      placeholder="Enter your industry"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Website */}
+                <div>
+                  <label htmlFor="website" className="block text-white/80 text-sm font-medium mb-2">
+                    Company Website
+                  </label>
+                  <div className="relative">
+                    <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-white/50" />
+                    <input
+                      type="url"
+                      id="website"
+                      name="website"
+                      value={formData.website}
+                      onChange={handleChange}
+                      className="input-glass pl-12"
+                      placeholder="https://companywebsite.com"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
             {/* Password Field */}
             <div>
               <label htmlFor="password" className="block text-white/80 text-sm font-medium mb-2">
@@ -182,16 +372,17 @@ const Register = () => {
                   name="password"
                   value={formData.password}
                   onChange={handleChange}
-                  className="input-glass pl-12 pr-12"
-                  placeholder="Create a password"
+                  className="input-glass pl-12"
+                  placeholder="Enter your password"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-white/50 hover:text-white/70 transition-colors duration-300"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-white/50 hover:text-white"
+                  tabIndex={-1}
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
             </div>
@@ -209,16 +400,17 @@ const Register = () => {
                   name="confirmPassword"
                   value={formData.confirmPassword}
                   onChange={handleChange}
-                  className="input-glass pl-12 pr-12"
+                  className="input-glass pl-12"
                   placeholder="Confirm your password"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-white/50 hover:text-white/70 transition-colors duration-300"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-white/50 hover:text-white"
+                  tabIndex={-1}
                 >
-                  {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
             </div>
@@ -227,34 +419,19 @@ const Register = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full btn-primary text-lg py-4 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+              className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-70 disabled:cursor-not-allowed rounded-xl py-3 text-white font-semibold transition-colors duration-300"
             >
-              {loading ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  <span>Creating account...</span>
-                </>
-              ) : (
-                <>
-                  <UserPlus className="w-5 h-5" />
-                  <span>Create Account</span>
-                </>
-              )}
+              {loading ? 'Registering...' : 'Create Account'}
             </button>
           </form>
 
           {/* Footer */}
-          <div className="mt-8 text-center">
-            <p className="text-white/70">
-              Already have an account?{' '}
-              <Link
-                to="/login"
-                className="text-purple-400 hover:text-purple-300 transition-colors duration-300 font-medium"
-              >
-                Sign in here
-              </Link>
-            </p>
-          </div>
+          <p className="text-white/80 mt-6 text-center text-sm">
+            Already have an account?{' '}
+            <Link to="/login" className="text-purple-400 hover:text-purple-600 font-semibold">
+              Log in
+            </Link>
+          </p>
         </div>
       </div>
     </div>

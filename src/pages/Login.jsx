@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { signIn } from '../services/firebase';
+import { signIn, resetPassword } from '../services/firebase';
 import { Mail, Lock, Eye, EyeOff, LogIn } from 'lucide-react';
 
 const Login = () => {
@@ -10,7 +10,9 @@ const Login = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
 
   const navigate = useNavigate();
 
@@ -20,12 +22,14 @@ const Login = () => {
       [e.target.name]: e.target.value
     });
     setError('');
+    setMessage('');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setMessage('');
 
     try {
       await signIn(formData.email, formData.password);
@@ -35,6 +39,25 @@ const Login = () => {
       setError(getErrorMessage(error.code));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!formData.email) {
+      setError('Please enter your email to reset your password.');
+      return;
+    }
+    setResetLoading(true);
+    setError('');
+    setMessage('');
+    try {
+      await resetPassword(formData.email);
+      setMessage('Password reset email sent. Check your inbox.');
+    } catch (error) {
+      console.error('Reset error:', error);
+      setError(getErrorMessage(error.code));
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -64,10 +87,16 @@ const Login = () => {
             <p className="text-white/70">Sign in to your account to continue</p>
           </div>
 
-          {/* Error Message */}
-          {error && (
-            <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-xl text-red-300 text-sm">
-              {error}
+          {/* Error / Success Message */}
+          {(error || message) && (
+            <div
+              className={`mb-6 p-4 border rounded-xl text-sm ${
+                error
+                  ? 'bg-red-500/20 border-red-500/30 text-red-300'
+                  : 'bg-green-500/20 border-green-500/30 text-green-300'
+              }`}
+            >
+              {error || message}
             </div>
           )}
 
@@ -118,6 +147,18 @@ const Login = () => {
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
+            </div>
+
+            {/* Forgot Password */}
+            <div className="text-right">
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={resetLoading}
+                className="text-sm text-purple-300 hover:text-purple-200 transition duration-300"
+              >
+                {resetLoading ? 'Sending reset email...' : 'Forgot Password?'}
+              </button>
             </div>
 
             {/* Submit Button */}
